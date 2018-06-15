@@ -1,7 +1,7 @@
 if (!requireNamespace("remotes", quietly = T)) install.packages("remotes")
 if (!requireNamespace("pacman", quietly = T)) install.packages("pacman")
 if (!requireNamespace("nrsmisc", quietly = T)) remotes::install_github("adamdsmith/nrsmisc")
-pacman::p_load(nrsmisc, dplyr, purrr, dataRetrieval)
+pacman::p_load(readr, nrsmisc, dplyr, purrr, lubridate, dataRetrieval)
 
 # Water temperature from a couple of NOAA tide/weather stations
 noaa_stns <- c(8761305, 8761927) # Shell Beach & New Canal Station, LA
@@ -68,3 +68,19 @@ unit_data <- lapply(unique(units$parm_cd), function(cd) {
 })
 unit_data <- reduce(unit_data, full_join, by = c("agency_cd", "site_no", "dateTime", "tz_cd"))
 saveRDS(unit_data, file = "./Output/usgs_unit.rds")
+
+# CRMS station data
+CRMS <- list.files("./Data/CRMS", pattern = "*.zip$", full.names = TRUE)
+crms <- lapply(CRMS, function(i) {
+  tmp <- read_csv(i, locale = locale(tz = "America/Chicago", encoding = "latin1")) %>%
+    select(site_no = `Station ID`, date = `Date (mm/dd/yyyy)`, time = `Time (hh:mm:ss)`,
+           tempC = `Adjusted Water Temperature (°C)`,
+           salinity_ppt = `Adjusted Salinity (ppt)`) %>%
+    mutate(dateTime = mdy_hms(paste(date, time), tz = "Etc/GMT-6")) %>%
+    select(-date, -time)
+  attr(tmp$dateTime, "tzone") <- "America/Chicago"
+  tmp
+})
+crms <- bind_rows(crms) %>%
+  filter(dateTime >= as.Date("2017-06-01", tz = "America/Chicago"))
+saveRDS(crms, file = "./Output/crms_data.rds")
